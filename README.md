@@ -306,6 +306,7 @@ These are the behaviors the brief grades, so they're worth a look:
 | "**No thanks**" when offered extras | Saves with just the required fields |
 | "**Hablo español**" | Switches to Spanish |
 
+Also the UI to view patients will be at: `YOOR-URL/dashboard`
 ---
 
 ## The REST API
@@ -363,7 +364,6 @@ curl / Postman  ─────────────────────�
 - `src/patient/` — the data layer: validation rules, database queries, REST endpoints.
 - `src/prisma/` — one shared database connection.
 - `src/common/` — the response envelope and error handling.
-- `docs/vapi-assistant-config.md` — the agent's prompt and tool definitions.
 
 The voice agent and the REST API go through **the same service**, so there's exactly one code path
 that writes a patient to the database. Nothing can be valid over the phone but invalid over HTTP.
@@ -374,6 +374,24 @@ engine, so the effort went into the prompt, the tool design and the backend inst
 
 **Why Postgres?** Native `uuid`, `date` and `enum` column types, so the data model's rules are
 enforced by the database and not just by the application in front of it.
+
+---
+
+### Proof it works
+
+Three moments from a live browser call with the assistant:
+
+**1. Collecting details and reading them back for confirmation**
+
+![The agent collecting patient details and confirming them](docs/demo/01-conversation.png)
+
+**2. The agent calling the backend to save the record**
+
+![register_patient tool call firing against the API](docs/demo/02-tool-call.png)
+
+**3. The record, retrieved afterwards through the REST API**
+
+![The saved patient returned by GET /patients](docs/demo/03-record-saved.png)
 
 ---
 
