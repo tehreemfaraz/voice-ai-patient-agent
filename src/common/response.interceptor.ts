@@ -9,14 +9,18 @@ import { map, Observable } from 'rxjs';
 
 /**
  * Wraps every successful REST response in the { data, error } envelope required by the spec.
- * Skipped for /voice/* routes: those responses must match Vapi's own webhook/tool-call schema,
- * not our API envelope.
+ * Skipped for two prefixes: /voice/*, whose responses must match Vapi's own webhook/tool-call
+ * schema rather than our API envelope, and /dashboard, which serves an HTML page.
  */
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
+  private static readonly UNWRAPPED = ['/voice', '/dashboard'];
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
-    if (request.path?.startsWith('/voice')) {
+    if (
+      ResponseInterceptor.UNWRAPPED.some((p) => request.path?.startsWith(p))
+    ) {
       return next.handle();
     }
     return next

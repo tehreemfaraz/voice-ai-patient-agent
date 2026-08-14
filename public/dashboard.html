@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient Records — Riverside Family Clinic</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #1a1d21;
+        --muted: #6b7280;
+        --line: #e3e6ea;
+        --accent: #2563eb;
+        --accent-soft: #eff4ff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14171a;
+          --panel: #1c2024;
+          --text: #e8eaed;
+          --muted: #9aa3ad;
+          --line: #2c3238;
+          --accent: #6ea8fe;
+          --accent-soft: #1e2733;
+        }
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .wrap { max-width: 1180px; margin: 0 auto; }
+
+      header { margin-bottom: 1.5rem; }
+      h1 { margin: 0 0 0.25rem; font-size: 1.5rem; letter-spacing: -0.01em; }
+      .sub { color: var(--muted); font-size: 0.9rem; }
+
+      .filters {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+        padding: 1rem; margin-bottom: 1rem;
+      }
+      .field { display: flex; flex-direction: column; gap: 0.3rem; }
+      label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      input {
+        font: inherit; padding: 0.5rem 0.65rem; min-width: 170px;
+        background: var(--bg); color: var(--text);
+        border: 1px solid var(--line); border-radius: 7px;
+      }
+      input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      button {
+        font: inherit; font-weight: 500; cursor: pointer;
+        padding: 0.5rem 0.9rem; border-radius: 7px;
+        border: 1px solid var(--accent); background: var(--accent); color: #fff;
+      }
+      button.ghost { background: transparent; color: var(--accent); }
+      button:hover { filter: brightness(1.07); }
+
+      .count { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.6rem; }
+
+      .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+      table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+      th, td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      th {
+        position: sticky; top: 0; background: var(--panel);
+        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      tbody tr:hover { background: var(--accent-soft); }
+      .name { font-weight: 600; }
+      .id { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.68rem; color: var(--muted); }
+      .none { color: var(--muted); }
+
+      .msg { padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+      .err {
+        background: var(--panel); border: 1px solid #e2555555; border-radius: 10px;
+        padding: 1rem 1.1rem; color: #d14343;
+      }
+      .err code { font-size: 0.85em; }
+      footer { margin-top: 1.5rem; color: var(--muted); font-size: 0.8rem; }
+      footer a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Patient Records</h1>
+        <div class="sub">
+          Registered through the voice agent, read live from the same
+          <code>/patients</code> API. Soft-deleted records are excluded.
+        </div>
+      </header>
+
+      <form class="filters" id="filters">
+        <div class="field">
+          <label for="last_name">Last name</label>
+          <input id="last_name" name="last_name" placeholder="Doe" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="date_of_birth">Date of birth</label>
+          <input id="date_of_birth" name="date_of_birth" placeholder="MM/DD/YYYY" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="phone_number">Phone</label>
+          <input id="phone_number" name="phone_number" placeholder="512 555 1234" autocomplete="off" />
+        </div>
+        <button type="submit">Search</button>
+        <button type="button" class="ghost" id="clear">Clear</button>
+      </form>
+
+      <p class="count" id="count"></p>
+      <div id="out"><div class="msg">Loading…</div></div>
+
+      <footer>
+        Voice AI Patient Registration Agent —
+        <a href="/patients">raw JSON</a>
+      </footer>
+    </div>
+
+    <script>
+      const COLUMNS = [
+        'Patient', 'Date of birth', 'Sex', 'Phone', 'Email',
+        'Address', 'Insurance', 'Emergency contact', 'Language', 'Registered',
+      ];
+
+      // date_of_birth arrives as a UTC calendar date. Read it with the UTC getters — using the
+      // local ones would shift the day backwards for anyone west of UTC, which is the exact bug
+      // the backend stores this column as a DATE to avoid.
+      function birthDate(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        const p = (n) => String(n).padStart(2, '0');
+        return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}/${d.getUTCFullYear()}`;
+      }
+
+      function timestamp(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime())
+          ? iso
+          : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      }
+
+      const phone = (v) =>
+        v && v.length === 10 ? `(${v.slice(0, 3)}) ${v.slice(3, 6)}-${v.slice(6)}` : v || '';
+
+      // "DeclineToAnswer" -> "Decline to Answer"
+      const sex = (v) => (v || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/ To /, ' to ');
+
+      const address = (p) =>
+        [p.address_line_1, p.address_line_2, `${p.city}, ${p.state} ${p.zip_code}`]
+          .filter(Boolean)
+          .join(' · ');
+
+      const insurance = (p) =>
+        [p.insurance_provider, p.insurance_member_id].filter(Boolean).join(' · ');
+
+      const emergency = (p) =>
+        [p.emergency_contact_name, phone(p.emergency_contact_phone)].filter(Boolean).join(' · ');
+
+      /** Builds a cell with textContent, never innerHTML — patient data is user input and must
+       *  never be able to inject markup into this page. */
+      function cell(value, className) {
+        const td = document.createElement('td');
+        if (value) {
+          td.textContent = value;
+        } else {
+          td.textContent = '—';
+          td.className = 'none';
+        }
+        if (className) td.className = className;
+        return td;
+      }
+
+      function renderTable(patients) {
+        const table = document.createElement('table');
+
+        const thead = table.createTHead().insertRow();
+        for (const label of COLUMNS) {
+          const th = document.createElement('th');
+          th.textContent = label;
+          thead.appendChild(th);
+        }
+
+        const tbody = table.createTBody();
+        for (const p of patients) {
+          const tr = tbody.insertRow();
+
+          const nameCell = document.createElement('td');
+          const name = document.createElement('span');
+          name.className = 'name';
+          name.textContent = `${p.first_name} ${p.last_name}`;
+          const id = document.createElement('span');
+          id.className = 'id';
+          id.textContent = p.patient_id;
+          nameCell.append(name, id);
+          tr.appendChild(nameCell);
+
+          tr.appendChild(cell(birthDate(p.date_of_birth)));
+          tr.appendChild(cell(sex(p.sex)));
+          tr.appendChild(cell(phone(p.phone_number)));
+          tr.appendChild(cell(p.email));
+          tr.appendChild(cell(address(p)));
+          tr.appendChild(cell(insurance(p)));
+          tr.appendChild(cell(emergency(p)));
+          tr.appendChild(cell(p.preferred_language));
+          tr.appendChild(cell(timestamp(p.created_at)));
+        }
+
+        const scroll = document.createElement('div');
+        scroll.className = 'scroll';
+        scroll.appendChild(table);
+        return scroll;
+      }
+
+      function show(node, countText = '') {
+        const out = document.getElementById('out');
+        out.replaceChildren(node);
+        document.getElementById('count').textContent = countText;
+      }
+
+      function message(text, className = 'msg') {
+        const div = document.createElement('div');
+        div.className = className;
+        div.textContent = text;
+        return div;
+      }
+
+      async function load() {
+        const form = new FormData(document.getElementById('filters'));
+        const params = new URLSearchParams();
+        for (const [key, value] of form.entries()) {
+          if (value.trim()) params.set(key, value.trim());
+        }
+        const query = params.toString();
+
+        show(message('Loading…'));
+
+        try {
+          const res = await fetch(`/patients${query ? `?${query}` : ''}`);
+          const body = await res.json();
+
+          if (!res.ok) {
+            // The API names the offending field, so surface that rather than a generic failure.
+            const detail = [].concat(body?.error?.message ?? 'Request failed').join(' · ');
+            return show(message(`${res.status} — ${detail}`, 'err'));
+          }
+
+          const patients = body.data ?? [];
+          if (!patients.length) {
+            return show(message(query ? 'No patients match those filters.' : 'No patients registered yet.'));
+          }
+
+          show(
+            renderTable(patients),
+            `${patients.length} patient${patients.length === 1 ? '' : 's'}${query ? ' matching' : ''}`,
+          );
+        } catch (err) {
+          show(message(`Could not reach the API — is the server running? (${err.message})`, 'err'));
+        }
+      }
+
+      document.getElementById('filters').addEventListener('submit', (e) => {
+        e.preventDefault();
+        void load();
+      });
+
+      document.getElementById('clear').addEventListener('click', () => {
+        document.getElementById('filters').reset();
+        void load();
+      });
+
+      void load();
+    </script>
+  </body>
+</html>

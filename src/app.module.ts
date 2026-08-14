@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { PatientModule } from './patient/patient.module';
 import { VoiceModule } from './voice/voice.module';
+import { DashboardController } from './dashboard/dashboard.controller';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { VoiceModule } from './voice/voice.module';
     PatientModule,
     VoiceModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, DashboardController],
   providers: [AppService],
 })
 export class AppModule {}
